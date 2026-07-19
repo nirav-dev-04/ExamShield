@@ -1,5 +1,6 @@
 package com.examshield.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -58,6 +59,7 @@ public class Exam {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash"})
     private User createdBy;
 
     @Column(name = "created_at", insertable = false, updatable = false)
@@ -72,7 +74,17 @@ public class Exam {
         joinColumns = @JoinColumn(name = "exam_id"),
         inverseJoinColumns = @JoinColumn(name = "proctor_id")
     )
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash"})
     private Set<User> proctors = new HashSet<>();
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "exam_students",
+        joinColumns = @JoinColumn(name = "exam_id"),
+        inverseJoinColumns = @JoinColumn(name = "student_id")
+    )
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash"})
+    private Set<User> students = new HashSet<>();
 
     public Exam() {}
 
@@ -80,7 +92,7 @@ public class Exam {
                 Integer lateEntryMinutes, Integer durationMinutes, Integer totalQuestions, Integer easyCount,
                 Integer mediumCount, Integer hardCount, Integer passingMarks, Integer maxViolations,
                 Boolean isSectioned, Boolean isPublished, User createdBy, LocalDateTime createdAt,
-                List<ExamSection> sections, Set<User> proctors) {
+                List<ExamSection> sections, Set<User> proctors, Set<User> students) {
         this.id = id;
         this.title = title;
         this.description = description;
@@ -100,6 +112,7 @@ public class Exam {
         this.createdAt = createdAt;
         if (sections != null) this.sections = sections;
         if (proctors != null) this.proctors = proctors;
+        if (students != null) this.students = students;
     }
 
     public Long getId() {
@@ -254,6 +267,14 @@ public class Exam {
         this.proctors = proctors;
     }
 
+    public Set<User> getStudents() {
+        return students;
+    }
+
+    public void setStudents(Set<User> students) {
+        this.students = students;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -278,6 +299,7 @@ public class Exam {
         private LocalDateTime createdAt;
         private List<ExamSection> sections = new ArrayList<>();
         private Set<User> proctors = new HashSet<>();
+        private Set<User> students = new HashSet<>();
 
         public Builder id(Long id) {
             this.id = id;
@@ -374,8 +396,13 @@ public class Exam {
             return this;
         }
 
+        public Builder students(Set<User> students) {
+            this.students = students;
+            return this;
+        }
+
         public Exam build() {
-            return new Exam(id, title, description, startTime, endTime, lateEntryMinutes, durationMinutes, totalQuestions, easyCount, mediumCount, hardCount, passingMarks, maxViolations, isSectioned, isPublished, createdBy, createdAt, sections, proctors);
+            return new Exam(id, title, description, startTime, endTime, lateEntryMinutes, durationMinutes, totalQuestions, easyCount, mediumCount, hardCount, passingMarks, maxViolations, isSectioned, isPublished, createdBy, createdAt, sections, proctors, students);
         }
     }
 }

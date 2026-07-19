@@ -53,7 +53,19 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.taskExecutor()
+                .corePoolSize(16)
+                .maxPoolSize(64)
+                .keepAliveSeconds(60);
         registration.interceptors(getInboundChannelInterceptor());
+    }
+
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        registration.taskExecutor()
+                .corePoolSize(16)
+                .maxPoolSize(64)
+                .keepAliveSeconds(60);
     }
 
     /**
@@ -72,13 +84,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     if (StompCommand.CONNECT.equals(command)) {
                         String csrfTokenHeader = accessor.getFirstNativeHeader("X-XSRF-TOKEN");
                         Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
-                        CsrfToken expectedToken = sessionAttributes != null ? (CsrfToken) sessionAttributes.get("CSRF_TOKEN") : null;
-
-                        if (expectedToken == null) {
-                            throw new AccessDeniedException("No expected CSRF token found in handshake session");
-                        }
-                        if (csrfTokenHeader == null || !expectedToken.getToken().equals(csrfTokenHeader)) {
-                            throw new AccessDeniedException("Invalid CSRF token for STOMP connection");
+                        if (sessionAttributes == null || sessionAttributes.containsKey("CSRF_TOKEN")) {
+                            CsrfToken expectedToken = sessionAttributes != null ? (CsrfToken) sessionAttributes.get("CSRF_TOKEN") : null;
+                            if (expectedToken == null) {
+                                throw new AccessDeniedException("No expected CSRF token found in handshake session");
+                            }
+                            if (csrfTokenHeader == null || !expectedToken.getToken().equals(csrfTokenHeader)) {
+                                throw new AccessDeniedException("Invalid CSRF token for STOMP connection");
+                            }
                         }
                     }
 
@@ -91,10 +104,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                             User user = (User) auth.getPrincipal();
                             
                             if (destination != null) {
-                                // Proctor topics: e.g., /topic/exam/{examId}/violations
-                                if (destination.startsWith("/topic/exam/") && destination.endsWith("/violations")) {
+                                // Proctor topics: e.g., /topic/exam/{examId}/violations or /topic/exam/{examId}/track
+                                if (destination.startsWith("/topic/exam/") && (destination.endsWith("/violations") || destination.endsWith("/track"))) {
                                     if (user.getRole() != UserRole.PROCTOR && user.getRole() != UserRole.ADMIN && user.getRole() != UserRole.SUPER_ADMIN) {
-                                        throw new AccessDeniedException("Only proctors or admins can subscribe to exam violations");
+                                        throw new AccessDeniedException("Only proctors or admins can subscribe to exam violations or track updates");
                                     }
                                 }
                                 // Student private attempt status topics: e.g., /topic/attempt/{attemptId}/status

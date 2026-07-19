@@ -1,5 +1,6 @@
 package com.examshield.backend.service;
 
+import com.examshield.backend.aspect.Auditable;
 import com.examshield.backend.dto.AnswerSubmitRequest;
 import com.examshield.backend.dto.ViolationResponseDTO;
 import com.examshield.backend.exception.*;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -44,10 +46,20 @@ public class ExamAttemptService {
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
+    @Autowired
+    private AuditLogService auditLogService;
+
     @Transactional
     public ExamAttempt startAttempt(Long examId, User student) {
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new ExamNotFoundException("Exam not found: " + examId));
+
+        // Verify student is assigned to this exam
+        boolean isAssigned = exam.getStudents().stream()
+                .anyMatch(s -> s.getId().equals(student.getId()));
+        if (!isAssigned) {
+            throw new com.examshield.backend.exception.UnauthorizedAccessException("You are not assigned to this exam");
+        }
 
         // Check if student already has an attempt
         Optional<ExamAttempt> existingOpt = examAttemptRepository.findByExamIdAndStudentId(examId, student.getId());
@@ -64,8 +76,10 @@ public class ExamAttemptService {
             // Duplicate attempt / Multi-tab prevention: if active, return existing
             if (existing.getStatus() == AttemptStatus.IN_PROGRESS) {
                 return existing;
+            } else if (existing.getStatus() == AttemptStatus.SUSPENDED) {
+                throw new DuplicateAttemptException("Your exam session has been suspended by the proctor.");
             } else {
-                throw new DuplicateAttemptException("You have already submitted or were suspended from this exam");
+                throw new DuplicateAttemptException("You have already completed and submitted this exam.");
             }
         }
 
@@ -100,6 +114,7 @@ public class ExamAttemptService {
 
         ExamAttempt savedAttempt = examAttemptRepository.save(attempt);
 
+        List<AttemptQuestion> aqList = new ArrayList<>();
         // Save shuffled question entities
         for (int i = 0; i < shuffledSelection.size(); i++) {
             AttemptQuestion aq = AttemptQuestion.builder()
@@ -107,8 +122,9 @@ public class ExamAttemptService {
                     .question(shuffledSelection.get(i))
                     .sequenceOrder(i + 1)
                     .build();
-            attemptQuestionRepository.save(aq);
+            aqList.add(attemptQuestionRepository.save(aq));
         }
+        savedAttempt.setAttemptQuestions(aqList);
 
         // Start Redis Timer
         redisTimerService.startTimer(savedAttempt.getId(), exam.getDurationMinutes());
@@ -312,5 +328,122 @@ public class ExamAttemptService {
         }
 
         examAttemptRepository.saveAll(attempts);
+    }
+
+    @Transactional
+    public void warnAttempt(Long attemptId, String message, User proctor) {
+        ExamAttempt attempt = examAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attempt not found"));
+
+        if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
+            throw new IllegalArgumentException("Cannot warn an exam that is not in progress");
+        }
+
+        validateProctorAssignment(attempt.getExam(), proctor);
+
+        auditLogService.log(proctor, "PROCTOR_WARNING", "ExamAttempt", attemptId, message);
+
+        java.util.Map<String, String> warningPayload = new java.util.HashMap<>();
+        warningPayload.put("type", "WARNING");
+        warningPayload.put("message", message);
+        messagingTemplate.convertAndSend("/topic/attempt/" + attemptId + "/status", warningPayload);
+    }
+
+    @Transactional
+    public void suspendAttempt(Long attemptId, User proctor) {
+        ExamAttempt attempt = examAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attempt not found"));
+
+        if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
+            throw new IllegalArgumentException("Cannot suspend an exam that is not in progress");
+        }
+
+        validateProctorAssignment(attempt.getExam(), proctor);
+
+        attempt.setStatus(AttemptStatus.SUSPENDED);
+        attempt.setSubmittedAt(LocalDateTime.now());
+        examAttemptRepository.save(attempt);
+
+        redisTimerService.cancelTimer(attemptId);
+
+        auditLogService.log(proctor, "PROCTOR_SUSPEND", "ExamAttempt", attemptId, "Forcibly suspended by proctor");
+
+        messagingTemplate.convertAndSend("/topic/attempt/" + attemptId + "/status", 
+                Collections.singletonMap("status", "SUSPENDED"));
+    }
+
+    @Transactional
+    @Auditable(action = "STUDENT_REACTIVATED")
+    public void reactivateAttempt(Long attemptId, User proctor) {
+        ExamAttempt attempt = examAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("Exam attempt not found"));
+
+        validateProctorAssignment(attempt.getExam(), proctor);
+
+        // Resume timer based on elapsed time:
+        if (attempt.getStatus() == AttemptStatus.SUSPENDED) {
+            LocalDateTime start = attempt.getStartedAt() != null ? attempt.getStartedAt() : LocalDateTime.now().minusMinutes(5);
+            LocalDateTime end = attempt.getSubmittedAt() != null ? attempt.getSubmittedAt() : LocalDateTime.now();
+            long elapsedSeconds = java.time.Duration.between(start, end).getSeconds();
+            long examDurationSeconds = attempt.getExam().getDurationMinutes() * 60L;
+            long remainingSeconds = examDurationSeconds - elapsedSeconds;
+            if (remainingSeconds < 60) {
+                remainingSeconds = 300; // Guarantee 5 minutes minimum if time ran out
+            }
+            redisTimerService.startTimer(attemptId, (int) (remainingSeconds / 60));
+        } else {
+            redisTimerService.startTimer(attemptId, attempt.getExam().getDurationMinutes());
+        }
+
+        // Clear violations so the student is not immediately re-suspended
+        violationRepository.deleteAll(attempt.getViolations());
+        attempt.getViolations().clear();
+
+        attempt.setStatus(AttemptStatus.IN_PROGRESS);
+        attempt.setSubmittedAt(null);
+        attempt.setProctorNotes(null); // Clear suspension reason notes
+        examAttemptRepository.save(attempt);
+
+        auditLogService.log(proctor, "PROCTOR_REACTIVATE", "ExamAttempt", attemptId, "Session reactivated by proctor");
+
+        messagingTemplate.convertAndSend("/topic/attempt/" + attemptId + "/status", 
+                Collections.singletonMap("status", "IN_PROGRESS"));
+    }
+
+    @Transactional
+    public void updateStudentTrack(Long attemptId, com.examshield.backend.dto.StudentTrackRequest request, User student) {
+        ExamAttempt attempt = examAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("Exam attempt not found"));
+
+        if (!attempt.getStudent().getId().equals(student.getId())) {
+            throw new UnauthorizedAccessException("Unauthorized: You do not own this attempt");
+        }
+
+        com.examshield.backend.dto.StudentTrackResponseDTO broadcast = new com.examshield.backend.dto.StudentTrackResponseDTO(
+                attemptId,
+                request.getCurrentQuestionIndex(),
+                request.getCurrentQuestionText(),
+                request.getAnsweredCount(),
+                request.getTotalQuestions(),
+                request.getLastAction(),
+                request.getQuestionStatusMap()
+        );
+
+        messagingTemplate.convertAndSend("/topic/exam/" + attempt.getExam().getId() + "/track", broadcast);
+    }
+
+    private void validateProctorAssignment(Exam exam, User proctor) {
+        if (proctor.getRole() == UserRole.ADMIN || proctor.getRole() == UserRole.SUPER_ADMIN) {
+            return;
+        }
+        boolean isAssigned = exam.getProctors().stream()
+                .anyMatch(p -> p.getId().equals(proctor.getId()));
+        if (!isAssigned) {
+            throw new UnauthorizedAccessException("Proctor is not assigned to this exam");
+        }
+    }
+
+    public Optional<ExamAttempt> getAttemptByExamAndStudent(Long examId, User student) {
+        return examAttemptRepository.findByExamIdAndStudentId(examId, student.getId());
     }
 }

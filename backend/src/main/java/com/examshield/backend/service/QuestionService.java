@@ -4,11 +4,15 @@ import com.examshield.backend.dto.QuestionCreateRequest;
 import com.examshield.backend.dto.AdminQuestionResponseDTO;
 import com.examshield.backend.mapper.DtoMapper;
 import com.examshield.backend.model.*;
+import com.examshield.backend.exception.ResourceNotFoundException;
 import com.examshield.backend.repository.QuestionRepository;
 import com.examshield.backend.repository.TopicRepository;
 import com.examshield.backend.repository.UserRepository;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,10 +35,22 @@ public class QuestionService {
     @Autowired
     private UserRepository userRepository;
 
+    private Topic getOrCreateTopicFromRequest(QuestionCreateRequest request) {
+        if (request.getTopicId() != null) {
+            return topicRepository.findById(request.getTopicId())
+                    .orElseThrow(() -> new IllegalArgumentException("Topic not found"));
+        } else if (request.getTopicName() != null && !request.getTopicName().trim().isEmpty()) {
+            String cleanName = request.getTopicName().trim();
+            return topicRepository.findByName(cleanName)
+                    .orElseGet(() -> topicRepository.save(Topic.builder().name(cleanName).build()));
+        } else {
+            throw new IllegalArgumentException("Either Topic ID or Topic Name is required");
+        }
+    }
+
     @Transactional
     public AdminQuestionResponseDTO createQuestion(QuestionCreateRequest request, User creator) {
-        Topic topic = topicRepository.findById(request.getTopicId())
-                .orElseThrow(() -> new IllegalArgumentException("Topic not found"));
+        Topic topic = getOrCreateTopicFromRequest(request);
 
         Question question = Question.builder()
                 .topic(topic)
@@ -73,6 +89,11 @@ public class QuestionService {
 
     @Transactional
     public Map<String, Object> bulkUploadQuestions(MultipartFile file, User creator) {
+        String filename = file.getOriginalFilename();
+        if (filename != null && filename.toLowerCase().endsWith(".pdf")) {
+            return uploadQuestionsFromPdf(file, creator);
+        }
+
         List<String> errors = new ArrayList<>();
         List<Question> questionsToSave = new ArrayList<>();
         int totalRows = 0;
@@ -206,5 +227,253 @@ public class QuestionService {
             }
         }
         return "";
+    }
+
+    public org.springframework.data.domain.Page<AdminQuestionResponseDTO> getQuestions(
+            Long topicId, Difficulty difficulty, QuestionType type, String search, org.springframework.data.domain.Pageable pageable) {
+        return questionRepository.filterQuestions(topicId, difficulty, type, search, pageable)
+                .map(DtoMapper::toAdminQuestionResponse);
+    }
+
+    @Transactional
+    public AdminQuestionResponseDTO updateQuestion(Long id, QuestionCreateRequest request) {
+        Question question = questionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Question not found"));
+
+        Topic topic = getOrCreateTopicFromRequest(request);
+
+        question.setTopic(topic);
+        question.setType(request.getType());
+        question.setQuestionText(request.getQuestionText());
+        question.setOptionA(request.getOptionA());
+        question.setOptionB(request.getOptionB());
+        question.setOptionC(request.getOptionC());
+        question.setOptionD(request.getOptionD());
+        question.setCorrectAnswer(request.getCorrectAnswer());
+        question.setDifficulty(request.getDifficulty());
+        question.setMarks(request.getMarks() != null ? request.getMarks() : 1);
+
+        validateQuestionAnswers(question);
+
+        Question saved = questionRepository.save(question);
+        return DtoMapper.toAdminQuestionResponse(saved);
+    }
+
+    @Transactional
+    public void deleteQuestion(Long id) {
+        if (!questionRepository.existsById(id)) {
+            throw new ResourceNotFoundException("Question not found");
+        }
+        questionRepository.deleteById(id);
+    }
+
+    private Map<String, Object> uploadQuestionsFromPdf(MultipartFile file, User creator) {
+        List<String> errors = new ArrayList<>();
+        List<Question> questionsToSave = new ArrayList<>();
+        int totalRows = 0;
+
+        try {
+            byte[] bytes = file.getBytes();
+            String text;
+            try (PDDocument document = Loader.loadPDF(bytes)) {
+                PDFTextStripper stripper = new PDFTextStripper();
+                text = stripper.getText(document);
+            }
+
+            if (text == null || text.trim().isEmpty()) {
+                throw new IllegalArgumentException("PDF file is empty or has no extractable text.");
+            }
+
+            // Clean topic from filename
+            String defaultTopicName = "General";
+            String filename = file.getOriginalFilename();
+            if (filename != null) {
+                int dot = filename.lastIndexOf('.');
+                if (dot > 0) {
+                    filename = filename.substring(0, dot);
+                }
+                String cleanFn = filename.replace('_', ' ').replace('-', ' ').trim();
+                String lowerFn = cleanFn.toLowerCase();
+                if (lowerFn.contains("java") && !lowerFn.contains("javascript") && !lowerFn.contains("js")) {
+                    defaultTopicName = "Java";
+                } else if (lowerFn.contains("python")) {
+                    defaultTopicName = "Python";
+                } else if (lowerFn.contains("javascript") || lowerFn.contains("js")) {
+                    defaultTopicName = "JavaScript";
+                } else if (lowerFn.contains("operating system") || lowerFn.contains("os")) {
+                    defaultTopicName = "Operating Systems";
+                } else if (lowerFn.contains("computer network") || lowerFn.contains("cn")) {
+                    defaultTopicName = "Computer Networks";
+                } else {
+                    defaultTopicName = cleanFn;
+                }
+            }
+
+            String[] lines = text.split("\\r?\\n");
+            
+            // Temporary builder states
+            String topicName = defaultTopicName;
+            QuestionType type = null; // null represents not explicitly set
+            Difficulty difficulty = null; // null represents not explicitly set
+            Integer marks = null; // null represents not explicitly set
+            
+            StringBuilder qText = new StringBuilder();
+            String optA = null;
+            String optB = null;
+            String optC = null;
+            String optD = null;
+            String correctAns = null;
+            
+            // Helper to build and validate a single question
+            class QuestionBuilder {
+                int count = 0;
+                
+                void addQuestion(String tName, QuestionType qType, String qTextStr, String a, String b, String c, String d, String ans, Difficulty diff, Integer mks) {
+                    if (qTextStr == null || qTextStr.trim().isEmpty()) {
+                        return;
+                    }
+                    count++;
+                    try {
+                        Topic topic = topicRepository.findByName(tName.trim())
+                                .orElseGet(() -> topicRepository.save(Topic.builder().name(tName.trim()).build()));
+                        
+                        // Default to SUBJECTIVE if options are completely absent
+                        QuestionType finalType = qType;
+                        if (finalType == null) {
+                            if (a == null && b == null && c == null && d == null) {
+                                finalType = QuestionType.SUBJECTIVE;
+                            } else {
+                                finalType = QuestionType.MCQ;
+                            }
+                        } else if (finalType == QuestionType.MCQ && a == null && b == null && c == null && d == null) {
+                            finalType = QuestionType.SUBJECTIVE;
+                        }
+
+                        // Round-robin difficulties if not explicitly defined in the document
+                        Difficulty finalDiff = diff;
+                        if (finalDiff == null) {
+                            int idx = count % 3;
+                            if (idx == 1) finalDiff = Difficulty.EASY;
+                            else if (idx == 2) finalDiff = Difficulty.MEDIUM;
+                            else finalDiff = Difficulty.HARD;
+                        }
+
+                        int finalMarks = mks != null ? mks : (finalType == QuestionType.SUBJECTIVE ? 5 : 2);
+                        
+                        // Clean answer and options if MCQ
+                        String cleanAns = ans != null ? ans.trim().toUpperCase() : null;
+                        if (finalType == QuestionType.MCQ) {
+                            if (cleanAns != null && cleanAns.length() > 1) {
+                                cleanAns = cleanAns.substring(0, 1);
+                            }
+                        }
+                        
+                        Question q = Question.builder()
+                                .topic(topic)
+                                .type(finalType)
+                                .questionText(qTextStr.trim())
+                                .optionA(a)
+                                .optionB(b)
+                                .optionC(c)
+                                .optionD(d)
+                                .correctAnswer(cleanAns)
+                                .difficulty(finalDiff)
+                                .marks(finalMarks)
+                                .createdBy(creator)
+                                .build();
+                                
+                        validateQuestionAnswers(q);
+                        questionsToSave.add(q);
+                    } catch (Exception ex) {
+                        errors.add("Question " + count + ": " + ex.getMessage());
+                    }
+                }
+            }
+            QuestionBuilder builder = new QuestionBuilder();
+
+            for (String line : lines) {
+                line = line.trim();
+                if (line.isEmpty()) {
+                    continue;
+                }
+
+                String lower = line.toLowerCase();
+                if (lower.startsWith("topic:") || lower.startsWith("subject:")) {
+                    builder.addQuestion(topicName, type, qText.toString(), optA, optB, optC, optD, correctAns, difficulty, marks);
+                    qText.setLength(0); optA = null; optB = null; optC = null; optD = null; correctAns = null;
+                    topicName = line.substring(line.indexOf(":") + 1).trim();
+                } else if (lower.startsWith("type:")) {
+                    String tStr = line.substring(line.indexOf(":") + 1).trim().toUpperCase();
+                    try {
+                        type = QuestionType.valueOf(tStr.replace(" ", "_"));
+                    } catch (Exception e) {
+                        // ignore or default
+                    }
+                } else if (lower.startsWith("difficulty:") || lower.startsWith("diff:")) {
+                    String dStr = line.substring(line.indexOf(":") + 1).trim().toUpperCase();
+                    try {
+                        difficulty = Difficulty.valueOf(dStr);
+                    } catch (Exception e) {
+                        // ignore or default
+                    }
+                } else if (lower.startsWith("marks:")) {
+                    try {
+                        marks = Integer.parseInt(line.substring(line.indexOf(":") + 1).trim());
+                    } catch (Exception e) {
+                        // ignore or default
+                    }
+                } else if (lower.startsWith("question:") || lower.startsWith("q:")) {
+                    builder.addQuestion(topicName, type, qText.toString(), optA, optB, optC, optD, correctAns, difficulty, marks);
+                    qText.setLength(0); optA = null; optB = null; optC = null; optD = null; correctAns = null;
+                    qText.append(line.substring(line.indexOf(":") + 1).trim());
+                } else if (lower.startsWith("a:") || lower.startsWith("a)") || lower.startsWith("a.")) {
+                    optA = cleanOptionPrefix(line, "a");
+                } else if (lower.startsWith("b:") || lower.startsWith("b)") || lower.startsWith("b.")) {
+                    optB = cleanOptionPrefix(line, "b");
+                } else if (lower.startsWith("c:") || lower.startsWith("c)") || lower.startsWith("c.")) {
+                    optC = cleanOptionPrefix(line, "c");
+                } else if (lower.startsWith("d:") || lower.startsWith("d)") || lower.startsWith("d.")) {
+                    optD = cleanOptionPrefix(line, "d");
+                } else if (lower.startsWith("correct:") || lower.startsWith("answer:") || lower.startsWith("correct answer:") || lower.startsWith("ans:")) {
+                    correctAns = line.substring(line.indexOf(":") + 1).trim();
+                } else {
+                    if (line.matches("^\\d+[\\.\\)\\s]+.*") || line.matches("^[qQ]\\d+[\\:\\.\\s]+.*")) {
+                        builder.addQuestion(topicName, type, qText.toString(), optA, optB, optC, optD, correctAns, difficulty, marks);
+                        qText.setLength(0); optA = null; optB = null; optC = null; optD = null; correctAns = null;
+                        
+                        String content = line.replaceFirst("^\\d+[\\.\\)\\s]+", "").replaceFirst("^[qQ]\\d+[\\:\\.\\s]+", "").trim();
+                        qText.append(content);
+                    } else {
+                        if (qText.length() > 0 && optA == null && optB == null && optC == null && optD == null && correctAns == null) {
+                            qText.append(" ").append(line);
+                        }
+                    }
+                }
+            }
+            builder.addQuestion(topicName, type, qText.toString(), optA, optB, optC, optD, correctAns, difficulty, marks);
+            totalRows = builder.count;
+
+            if (!questionsToSave.isEmpty()) {
+                questionRepository.saveAll(questionsToSave);
+            }
+
+        } catch (Exception ex) {
+            errors.add("Failed to parse PDF: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("totalRows", totalRows);
+        result.put("successCount", questionsToSave.size());
+        result.put("errors", errors);
+        return result;
+    }
+
+    private String cleanOptionPrefix(String line, String prefix) {
+        String content = line.substring(prefix.length()).trim();
+        if (content.startsWith(".") || content.startsWith(")") || content.startsWith(":")) {
+            content = content.substring(1).trim();
+        }
+        return content;
     }
 }

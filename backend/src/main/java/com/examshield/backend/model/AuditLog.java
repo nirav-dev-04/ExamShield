@@ -24,6 +24,7 @@ public class AuditLog {
     private Long entityId;
 
     @Column(columnDefinition = "jsonb")
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     private String details;
 
     @Column(name = "created_at", insertable = false, updatable = false)

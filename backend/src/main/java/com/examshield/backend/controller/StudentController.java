@@ -38,15 +38,26 @@ public class StudentController {
     private RateLimiterService rateLimiterService;
 
     @GetMapping("/exams")
-    public ResponseEntity<List<Exam>> getAvailableExams() {
-        return ResponseEntity.ok(examRepository.findByIsPublishedTrue());
+    public ResponseEntity<List<Exam>> getAvailableExams(@AuthenticationPrincipal User student) {
+        return ResponseEntity.ok(examRepository.findByIsPublishedTrueAndStudentsId(student.getId()));
     }
 
     @PostMapping("/exams/{examId}/start")
     public ResponseEntity<ExamAttemptResponseDTO> startExam(
             @PathVariable Long examId,
             @AuthenticationPrincipal User student) {
-        ExamAttempt attempt = examAttemptService.startAttempt(examId, student);
+        ExamAttempt attempt;
+        try {
+            attempt = examAttemptService.startAttempt(examId, student);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            try {
+                Thread.sleep(150);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+            attempt = examAttemptService.getAttemptByExamAndStudent(examId, student)
+                    .orElseThrow(() -> e);
+        }
         Long remainingSeconds = redisTimerService.getRemainingSeconds(attempt.getId());
         return ResponseEntity.ok(DtoMapper.toExamAttemptResponse(attempt, remainingSeconds));
     }
@@ -91,6 +102,35 @@ public class StudentController {
             @Valid @RequestBody ViolationReportRequest request,
             @AuthenticationPrincipal User student) {
         examAttemptService.reportViolation(attemptId, request.getType(), student);
-        return ResponseEntity.ok(Collections.singletonMap("message", "Violation reported"));
+        ExamAttempt attempt = examAttemptRepository.findById(attemptId).orElse(null);
+        String status = attempt != null ? attempt.getStatus().name() : "IN_PROGRESS";
+
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("message", "Violation reported");
+        response.put("status", status);
+        return ResponseEntity.ok(response);
+    }
+    @PostMapping("/attempts/{attemptId}/track")
+    public ResponseEntity<?> updateTrack(
+            @PathVariable Long attemptId,
+            @RequestBody com.examshield.backend.dto.StudentTrackRequest request,
+            @AuthenticationPrincipal User student) {
+        examAttemptService.updateStudentTrack(attemptId, request, student);
+        return ResponseEntity.ok().build();
+    }
+    @Autowired
+    private com.examshield.backend.repository.ExamAttemptRepository examAttemptRepository;
+
+    @GetMapping("/attempts")
+    public ResponseEntity<List<ExamAttemptResponseDTO>> getMyAttempts(
+            @AuthenticationPrincipal User student) {
+        List<ExamAttempt> attempts = examAttemptRepository.findByStudentId(student.getId());
+        List<ExamAttemptResponseDTO> response = attempts.stream()
+                .map(a -> {
+                    Long remainingSeconds = redisTimerService.getRemainingSeconds(a.getId());
+                    return DtoMapper.toExamAttemptResponse(a, remainingSeconds);
+                })
+                .collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(response);
     }
 }

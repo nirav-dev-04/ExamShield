@@ -19,9 +19,11 @@ public class DtoMapper {
                 .build();
     }
 
-    public static QuestionResponseDTO toQuestionResponse(Question question, Integer sequenceOrder) {
-        if (question == null) return null;
-        return QuestionResponseDTO.builder()
+    public static QuestionResponseDTO toQuestionResponse(AttemptQuestion aq) {
+        if (aq == null) return null;
+        Question question = aq.getQuestion();
+        
+        QuestionResponseDTO.Builder builder = QuestionResponseDTO.builder()
                 .id(question.getId())
                 .topicId(question.getTopic() != null ? question.getTopic().getId() : null)
                 .topicName(question.getTopic() != null ? question.getTopic().getName() : null)
@@ -33,8 +35,19 @@ public class DtoMapper {
                 .optionD(question.getOptionD())
                 .difficulty(question.getDifficulty())
                 .marks(question.getMarks())
-                .sequenceOrder(sequenceOrder)
-                .build();
+                .sequenceOrder(aq.getSequenceOrder());
+
+        AttemptStatus status = aq.getAttempt().getStatus();
+        if (status == AttemptStatus.SUBMITTED || status == AttemptStatus.AUTO_SUBMITTED || status == AttemptStatus.SUSPENDED) {
+            builder.studentAnswer(aq.getStudentAnswer());
+            builder.correctAnswer(question.getCorrectAnswer());
+            builder.isCorrect(aq.getIsCorrect());
+            builder.marksAwarded(aq.getMarksAwarded());
+        } else {
+            builder.studentAnswer(aq.getStudentAnswer());
+        }
+
+        return builder.build();
     }
 
     public static AdminQuestionResponseDTO toAdminQuestionResponse(Question question) {
@@ -59,7 +72,7 @@ public class DtoMapper {
         if (attempt == null) return null;
 
         List<QuestionResponseDTO> questionDtos = attempt.getAttemptQuestions().stream()
-                .map(aq -> toQuestionResponse(aq.getQuestion(), aq.getSequenceOrder()))
+                .map(aq -> toQuestionResponse(aq))
                 .collect(Collectors.toList());
 
         return ExamAttemptResponseDTO.builder()
@@ -73,6 +86,9 @@ public class DtoMapper {
                 .remainingSeconds(remainingSeconds)
                 .questions(questionDtos)
                 .violationsCount(attempt.getViolations().size())
+                .totalScore(attempt.getTotalScore())
+                .rank(attempt.getRank())
+                .proctorNotes(attempt.getProctorNotes())
                 .build();
     }
 

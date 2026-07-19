@@ -9,4 +9,5 @@ import java.util.List;
 public interface ExamRepository extends JpaRepository<Exam, Long> {
     List<Exam> findByProctorsId(Long proctorId);
     List<Exam> findByIsPublishedTrue();
+    List<Exam> findByIsPublishedTrueAndStudentsId(Long studentId);
 }

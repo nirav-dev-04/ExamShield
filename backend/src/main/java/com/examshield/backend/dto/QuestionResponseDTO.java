@@ -16,6 +16,10 @@ public class QuestionResponseDTO {
     private Difficulty difficulty;
     private Integer marks;
     private Integer sequenceOrder;
+    private String studentAnswer;
+    private String correctAnswer;
+    private Boolean isCorrect;
+    private java.math.BigDecimal marksAwarded;
 
     public QuestionResponseDTO() {}
 
@@ -34,6 +38,29 @@ public class QuestionResponseDTO {
         this.difficulty = difficulty;
         this.marks = marks;
         this.sequenceOrder = sequenceOrder;
+    }
+
+    public QuestionResponseDTO(Long id, Long topicId, String topicName, QuestionType type, String questionText,
+                               String optionA, String optionB, String optionC, String optionD,
+                               Difficulty difficulty, Integer marks, Integer sequenceOrder,
+                               String studentAnswer, String correctAnswer, Boolean isCorrect,
+                               java.math.BigDecimal marksAwarded) {
+        this.id = id;
+        this.topicId = topicId;
+        this.topicName = topicName;
+        this.type = type;
+        this.questionText = questionText;
+        this.optionA = optionA;
+        this.optionB = optionB;
+        this.optionC = optionC;
+        this.optionD = optionD;
+        this.difficulty = difficulty;
+        this.marks = marks;
+        this.sequenceOrder = sequenceOrder;
+        this.studentAnswer = studentAnswer;
+        this.correctAnswer = correctAnswer;
+        this.isCorrect = isCorrect;
+        this.marksAwarded = marksAwarded;
     }
 
     public Long getId() {
@@ -132,6 +159,38 @@ public class QuestionResponseDTO {
         this.sequenceOrder = sequenceOrder;
     }
 
+    public String getStudentAnswer() {
+        return studentAnswer;
+    }
+
+    public void setStudentAnswer(String studentAnswer) {
+        this.studentAnswer = studentAnswer;
+    }
+
+    public String getCorrectAnswer() {
+        return correctAnswer;
+    }
+
+    public void setCorrectAnswer(String correctAnswer) {
+        this.correctAnswer = correctAnswer;
+    }
+
+    public Boolean getIsCorrect() {
+        return isCorrect;
+    }
+
+    public void setIsCorrect(Boolean isCorrect) {
+        this.isCorrect = isCorrect;
+    }
+
+    public java.math.BigDecimal getMarksAwarded() {
+        return marksAwarded;
+    }
+
+    public void setMarksAwarded(java.math.BigDecimal marksAwarded) {
+        this.marksAwarded = marksAwarded;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -149,6 +208,10 @@ public class QuestionResponseDTO {
         private Difficulty difficulty;
         private Integer marks;
         private Integer sequenceOrder;
+        private String studentAnswer;
+        private String correctAnswer;
+        private Boolean isCorrect;
+        private java.math.BigDecimal marksAwarded;
 
         public Builder id(Long id) {
             this.id = id;
@@ -210,8 +273,28 @@ public class QuestionResponseDTO {
             return this;
         }
 
+        public Builder studentAnswer(String studentAnswer) {
+            this.studentAnswer = studentAnswer;
+            return this;
+        }
+
+        public Builder correctAnswer(String correctAnswer) {
+            this.correctAnswer = correctAnswer;
+            return this;
+        }
+
+        public Builder isCorrect(Boolean isCorrect) {
+            this.isCorrect = isCorrect;
+            return this;
+        }
+
+        public Builder marksAwarded(java.math.BigDecimal marksAwarded) {
+            this.marksAwarded = marksAwarded;
+            return this;
+        }
+
         public QuestionResponseDTO build() {
-            return new QuestionResponseDTO(id, topicId, topicName, type, questionText, optionA, optionB, optionC, optionD, difficulty, marks, sequenceOrder);
+            return new QuestionResponseDTO(id, topicId, topicName, type, questionText, optionA, optionB, optionC, optionD, difficulty, marks, sequenceOrder, studentAnswer, correctAnswer, isCorrect, marksAwarded);
         }
     }
 }

@@ -8,8 +8,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 public class QuestionCreateRequest {
-    @NotNull(message = "Topic ID is required")
     private Long topicId;
+    private String topicName;
 
     @NotNull(message = "Question type is required")
     private QuestionType type;
@@ -51,6 +51,14 @@ public class QuestionCreateRequest {
 
     public void setTopicId(Long topicId) {
         this.topicId = topicId;
+    }
+
+    public String getTopicName() {
+        return topicName;
+    }
+
+    public void setTopicName(String topicName) {
+        this.topicName = topicName;
     }
 
     public QuestionType getType() {

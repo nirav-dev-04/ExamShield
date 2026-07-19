@@ -60,7 +60,7 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    public void addJwtCookiesToResponse(HttpServletResponse response, String accessToken, String refreshToken) {
+    public void addAccessTokenCookie(HttpServletResponse response, String accessToken) {
         ResponseCookie accessCookie = ResponseCookie.from(cookieName, accessToken)
                 .httpOnly(true)
                 .secure(false) // Set true in production if running HTTPS
@@ -68,7 +68,10 @@ public class JwtTokenProvider {
                 .maxAge(jwtExpirationInMs / 1000)
                 .sameSite("Lax")
                 .build();
+        response.addHeader("Set-Cookie", accessCookie.toString());
+    }
 
+    public void addRefreshTokenCookie(HttpServletResponse response, String refreshToken) {
         ResponseCookie refreshCookie = ResponseCookie.from(refreshCookieName, refreshToken)
                 .httpOnly(true)
                 .secure(false) // Set true in production if running HTTPS
@@ -76,9 +79,12 @@ public class JwtTokenProvider {
                 .maxAge(refreshExpirationInMs / 1000)
                 .sameSite("Lax")
                 .build();
-
-        response.addHeader("Set-Cookie", accessCookie.toString());
         response.addHeader("Set-Cookie", refreshCookie.toString());
+    }
+
+    public void addJwtCookiesToResponse(HttpServletResponse response, String accessToken, String refreshToken) {
+        addAccessTokenCookie(response, accessToken);
+        addRefreshTokenCookie(response, refreshToken);
     }
 
     public void clearJwtCookies(HttpServletResponse response) {
@@ -146,5 +152,9 @@ public class JwtTokenProvider {
             // Token is invalid, expired, or malformed
             return false;
         }
+    }
+
+    public String getRefreshCookieName() {
+        return refreshCookieName;
     }
 }

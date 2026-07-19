@@ -10,5 +10,6 @@ import java.util.List;
 public interface ViolationRepository extends JpaRepository<Violation, Long> {
     List<Violation> findByAttemptIdOrderByOccurredAtDesc(Long attemptId);
     List<Violation> findByAttemptExamIdAndOccurredAtAfterOrderByOccurredAtAsc(Long examId, LocalDateTime timestamp);
+    List<Violation> findTop10ByOrderByOccurredAtDesc();
     long countByAttemptId(Long attemptId);
 }

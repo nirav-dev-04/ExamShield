@@ -10,6 +10,8 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.transaction.annotation.Transactional;
+
 @Component
 @EnableScheduling
 public class TimerCleanupScheduler {
@@ -22,6 +24,7 @@ public class TimerCleanupScheduler {
 
     // Runs every 1 minute (60,000 milliseconds)
     @Scheduled(fixedRate = 60000)
+    @Transactional
     public void sweepExpiredAttempts() {
         // Query directly from database by IN_PROGRESS status (production-grade query pattern)
         List<ExamAttempt> activeAttempts = examAttemptRepository.findByStatus(AttemptStatus.IN_PROGRESS);

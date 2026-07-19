@@ -1,6 +1,0 @@
-com\examshield\backend\security\JwtTokenProviderTest.class
-com\examshield\backend\service\ExamAttemptServiceTest.class
-com\examshield\backend\service\ShuffleServiceTest.class
-com\examshield\backend\security\RateLimiterServiceTest.class
-com\examshield\backend\ExamIntegrationTest$TestConfig.class
-com\examshield\backend\ExamIntegrationTest.class

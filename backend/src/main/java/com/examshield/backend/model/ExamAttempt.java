@@ -42,6 +42,9 @@ public class ExamAttempt {
     @Column(name = "rank")
     private Integer rank;
 
+    @Column(name = "proctor_notes", columnDefinition = "TEXT")
+    private String proctorNotes;
+
     @OneToMany(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<AttemptQuestion> attemptQuestions = new ArrayList<>();
 
@@ -152,6 +155,14 @@ public class ExamAttempt {
 
     public void setViolations(List<Violation> violations) {
         this.violations = violations;
+    }
+
+    public String getProctorNotes() {
+        return proctorNotes;
+    }
+
+    public void setProctorNotes(String proctorNotes) {
+        this.proctorNotes = proctorNotes;
     }
 
     public static Builder builder() {

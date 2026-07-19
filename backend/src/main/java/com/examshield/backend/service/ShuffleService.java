@@ -47,29 +47,39 @@ public class ShuffleService {
                 .filter(q -> q.getDifficulty() == Difficulty.HARD)
                 .collect(Collectors.toList());
 
-        // Validate that pool has enough questions
-        if (easyPool.size() < easyCount) {
-            throw new IllegalArgumentException("Not enough EASY questions in the pool. Required: " + easyCount + ", Available: " + easyPool.size());
-        }
-        if (mediumPool.size() < mediumCount) {
-            throw new IllegalArgumentException("Not enough MEDIUM questions in the pool. Required: " + mediumCount + ", Available: " + mediumPool.size());
-        }
-        if (hardPool.size() < hardCount) {
-            throw new IllegalArgumentException("Not enough HARD questions in the pool. Required: " + hardCount + ", Available: " + hardPool.size());
-        }
-
         // Shuffle each pool using the seed-derived Random
         Collections.shuffle(easyPool, random);
         Collections.shuffle(mediumPool, random);
         Collections.shuffle(hardPool, random);
 
-        // Pick required counts
         List<Question> selected = new ArrayList<>();
-        selected.addAll(easyPool.subList(0, easyCount));
-        selected.addAll(mediumPool.subList(0, mediumCount));
-        selected.addAll(hardPool.subList(0, hardCount));
+        List<Question> remaining = new ArrayList<>();
 
-        // Re-shuffle the combined list to mix difficulties
+        // Safely pick easy questions
+        int easyToPick = Math.min(easyCount, easyPool.size());
+        selected.addAll(easyPool.subList(0, easyToPick));
+        remaining.addAll(easyPool.subList(easyToPick, easyPool.size()));
+
+        // Safely pick medium questions
+        int mediumToPick = Math.min(mediumCount, mediumPool.size());
+        selected.addAll(mediumPool.subList(0, mediumToPick));
+        remaining.addAll(mediumPool.subList(mediumToPick, mediumPool.size()));
+
+        // Safely pick hard questions
+        int hardToPick = Math.min(hardCount, hardPool.size());
+        selected.addAll(hardPool.subList(0, hardToPick));
+        remaining.addAll(hardPool.subList(hardToPick, hardPool.size()));
+
+        // Backfill from remaining questions if necessary to reach total count
+        int totalRequired = easyCount + mediumCount + hardCount;
+        if (selected.size() < totalRequired) {
+            Collections.shuffle(remaining, random);
+            int needed = totalRequired - selected.size();
+            int toTake = Math.min(needed, remaining.size());
+            selected.addAll(remaining.subList(0, toTake));
+        }
+
+        // Re-shuffle combined list to mix difficulties
         Collections.shuffle(selected, random);
 
         return selected;

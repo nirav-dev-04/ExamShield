@@ -31,10 +31,16 @@ public class ExamService {
     private QuestionRepository questionRepository;
 
     @Autowired
+    private TopicRepository topicRepository;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
     private ExamAttemptRepository examAttemptRepository;
+
+    @Autowired
+    private com.examshield.backend.repository.AuditLogRepository auditLogRepository;
 
     @Transactional
     public Exam createExam(ExamCreateRequest request, User creator) {
@@ -148,17 +154,48 @@ public class ExamService {
             return;
         }
 
-        // Validate pool completeness before locking
+        // Auto-populate the exam pool with matching questions if the pool is empty!
         List<ExamQuestionPool> pool = examQuestionPoolRepository.findByExamId(examId);
-        long easyCountInPool = pool.stream().filter(p -> p.getQuestion().getDifficulty() == Difficulty.EASY).count();
-        long mediumCountInPool = pool.stream().filter(p -> p.getQuestion().getDifficulty() == Difficulty.MEDIUM).count();
-        long hardCountInPool = pool.stream().filter(p -> p.getQuestion().getDifficulty() == Difficulty.HARD).count();
+        if (pool.isEmpty()) {
+            String examTitle = exam.getTitle().toLowerCase().trim();
+            List<Topic> allTopics = topicRepository.findAll();
+            Topic matchingTopic = null;
+            for (Topic t : allTopics) {
+                String tName = t.getName().toLowerCase().trim();
+                if (examTitle.contains(tName) || tName.contains(examTitle)) {
+                    matchingTopic = t;
+                    break;
+                }
+            }
+            if (matchingTopic != null) {
+                List<Question> questions = questionRepository.findByTopicId(matchingTopic.getId());
+                for (Question q : questions) {
+                    ExamQuestionPool poolEntry = ExamQuestionPool.builder()
+                            .exam(exam)
+                            .question(q)
+                            .build();
+                    examQuestionPoolRepository.save(poolEntry);
+                }
+            } else {
+                List<Question> allQuestions = questionRepository.findAll();
+                int toTake = Math.min(30, allQuestions.size());
+                for (int i = 0; i < toTake; i++) {
+                    ExamQuestionPool poolEntry = ExamQuestionPool.builder()
+                            .exam(exam)
+                            .question(allQuestions.get(i))
+                            .build();
+                    examQuestionPoolRepository.save(poolEntry);
+                }
+            }
+            // Reload pool after auto-populating
+            pool = examQuestionPoolRepository.findByExamId(examId);
+        }
 
-        if (easyCountInPool < exam.getEasyCount() || mediumCountInPool < exam.getMediumCount() || hardCountInPool < exam.getHardCount()) {
+        int totalRequired = exam.getEasyCount() + exam.getMediumCount() + exam.getHardCount();
+        if (pool.size() < totalRequired) {
             throw new IllegalArgumentException(String.format("Cannot publish exam. Question pool is insufficient. " +
-                    "Required: %dE/%dM/%dH, Available: %dE/%dM/%dH",
-                    exam.getEasyCount(), exam.getMediumCount(), exam.getHardCount(),
-                    easyCountInPool, mediumCountInPool, hardCountInPool));
+                    "Required: %d questions, Available: %d questions",
+                    totalRequired, pool.size()));
         }
 
         exam.setIsPublished(true);
@@ -197,6 +234,32 @@ public class ExamService {
                 .build();
 
         examQuestionPoolRepository.save(poolEntry);
+    }
+
+    public List<com.examshield.backend.dto.AdminQuestionResponseDTO> getExamQuestionPool(Long examId) {
+        List<ExamQuestionPool> pool = examQuestionPoolRepository.findByExamId(examId);
+        return pool.stream()
+                .map(p -> com.examshield.backend.mapper.DtoMapper.toAdminQuestionResponse(p.getQuestion()))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void removeQuestionFromPool(Long examId, Long questionId) {
+        Exam exam = examRepository.findById(examId)
+                .orElseThrow(() -> new ExamNotFoundException("Exam not found"));
+
+        if (Boolean.TRUE.equals(exam.getIsPublished())) {
+            throw new QuestionPoolLockedException("Cannot remove questions from a published exam pool");
+        }
+
+        List<ExamQuestionPool> pool = examQuestionPoolRepository.findByExamId(examId);
+        for (ExamQuestionPool p : pool) {
+            if (p.getQuestion().getId().equals(questionId)) {
+                examQuestionPoolRepository.delete(p);
+                return;
+            }
+        }
+        throw new IllegalArgumentException("Question is not in the exam pool");
     }
 
     @Transactional
@@ -239,14 +302,41 @@ public class ExamService {
                 .average()
                 .orElse(0.0);
 
-        List<Map<String, Object>> topperList = gradedAttempts.stream()
-                .limit(5)
+        List<Map<String, Object>> topperList = attempts.stream()
+                .sorted((a1, a2) -> {
+                    if (a1.getTotalScore() == null && a2.getTotalScore() == null) return 0;
+                    if (a1.getTotalScore() == null) return 1;
+                    if (a2.getTotalScore() == null) return -1;
+                    return a2.getTotalScore().compareTo(a1.getTotalScore());
+                })
                 .map(a -> {
                     Map<String, Object> map = new HashMap<>();
                     map.put("studentName", a.getStudent().getFullName());
                     map.put("enrollmentNo", a.getStudent().getEnrollmentNo());
                     map.put("score", a.getTotalScore());
                     map.put("rank", a.getRank());
+                    map.put("status", a.getStatus().name());
+                    map.put("violationsCount", a.getViolations() != null ? a.getViolations().size() : 0);
+                    map.put("proctorNotes", a.getProctorNotes());
+
+                    List<String> warnings = new ArrayList<>();
+                    String suspendedBy = null;
+                    try {
+                        List<com.examshield.backend.model.AuditLog> logs = auditLogRepository
+                                .findByEntityTypeAndEntityIdOrderByCreatedAtDesc("ExamAttempt", a.getId());
+                        for (com.examshield.backend.model.AuditLog log : logs) {
+                            if ("PROCTOR_WARNING".equals(log.getAction())) {
+                                String proctorName = log.getActor() != null ? log.getActor().getFullName() : "Proctor";
+                                warnings.add(proctorName + ": " + log.getDetails());
+                            } else if ("PROCTOR_SUSPEND".equals(log.getAction())) {
+                                suspendedBy = log.getActor() != null ? log.getActor().getFullName() : "Proctor";
+                            }
+                        }
+                    } catch (Exception e) {
+                        // ignore
+                    }
+                    map.put("warnings", warnings);
+                    map.put("suspendedBy", suspendedBy);
                     return map;
                 })
                 .collect(Collectors.toList());
@@ -276,15 +366,19 @@ public class ExamService {
         Map<String, Object> response = new HashMap<>();
         response.put("examId", exam.getId());
         response.put("title", exam.getTitle());
-        response.put("totalRegistered", totalAttempts);
+        response.put("totalAttempts", totalAttempts);
         response.put("submittedCount", submittedCount);
         response.put("suspendedCount", suspendedCount);
         response.put("passedCount", passedCount);
-        response.put("passRatePercent", totalAttempts == 0 ? 0.0 : BigDecimal.valueOf((double) passedCount / totalAttempts * 100).setScale(2, RoundingMode.HALF_UP));
-        response.put("avgScore", BigDecimal.valueOf(avgScore).setScale(2, RoundingMode.HALF_UP));
+        response.put("passPercentage", totalAttempts == 0 ? 0.0 : BigDecimal.valueOf((double) passedCount / totalAttempts * 100).setScale(2, RoundingMode.HALF_UP));
+        response.put("averageScore", BigDecimal.valueOf(avgScore).setScale(2, RoundingMode.HALF_UP));
         response.put("toppers", topperList);
         response.put("scoreDistribution", scoreRanges);
 
         return response;
+    }
+
+    public List<Exam> getAllExams() {
+        return examRepository.findAll();
     }
 }

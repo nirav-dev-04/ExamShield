@@ -15,9 +15,13 @@ C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\d
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\ExamSectionDto.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\QuestionCreateRequest.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\QuestionResponseDTO.java
+C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\StudentTrackRequest.java
+C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\StudentTrackResponseDTO.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\UserLoginRequest.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\UserRegisterRequest.java
+C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\UserResetPasswordRequest.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\UserResponseDTO.java
+C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\UserUpdateRequest.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\ViolationReportRequest.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\dto\ViolationResponseDTO.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\exception\AttemptAlreadySubmittedException.java
@@ -39,6 +43,7 @@ C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\m
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\model\ExamSection.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\model\Question.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\model\QuestionType.java
+C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\model\RefreshToken.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\model\Topic.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\model\User.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\model\UserRole.java
@@ -51,6 +56,7 @@ C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\r
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\repository\ExamRepository.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\repository\ExamSectionRepository.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\repository\QuestionRepository.java
+C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\repository\RefreshTokenRepository.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\repository\TopicRepository.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\repository\UserRepository.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\repository\ViolationRepository.java
@@ -58,6 +64,7 @@ C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\s
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\security\JwtTokenProvider.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\security\RateLimiterService.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\security\SecurityConfig.java
+C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\security\TokenHasher.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\service\AuditLogService.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\service\ExamAttemptService.java
 C:\Users\nirav\Desktop\ExamShield\backend\src\main\java\com\examshield\backend\service\ExamService.java
