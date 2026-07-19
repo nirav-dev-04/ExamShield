@@ -14,4 +14,5 @@ export interface Exam {
   isSectioned: boolean;
   isPublished: boolean;
   createdAt: string;
+  proctors?: { id: number; fullName: string; email: string }[];
 }

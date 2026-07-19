@@ -6,7 +6,7 @@ import { apiClient } from "../config/axios";
 interface AuthContextType {
   user: UserResponseDTO | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<UserResponseDTO>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<UserResponseDTO>;
   logout: () => Promise<void>;
   register: (fullName: string, email: string, password: string, role: UserRole, enrollmentNo: string) => Promise<UserResponseDTO>;
 }
@@ -32,8 +32,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchSession();
   }, []);
 
-  const login = async (email: string, password: string): Promise<UserResponseDTO> => {
-    const response = await apiClient.post<UserResponseDTO>("/auth/login", { email, password });
+  const login = async (email: string, password: string, rememberMe = false): Promise<UserResponseDTO> => {
+    const response = await apiClient.post<UserResponseDTO>("/auth/login", { email, password, rememberMe });
     setUser(response.data);
     return response.data;
   };

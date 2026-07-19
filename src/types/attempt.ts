@@ -9,6 +9,8 @@ export interface ExamAttemptResponseDTO {
   remainingSeconds: number;
   questions: QuestionResponseDTO[];
   violationsCount: number;
+  totalScore?: number | null;
+  rank?: number | null;
 }
 
 export interface QuestionResponseDTO {

@@ -24,6 +24,7 @@ export function useTimer(attemptId: number, onTimeout: () => void) {
   };
 
   useEffect(() => {
+    if (attemptId === 0) return;
     syncTimer();
 
     // Fetch actual backend remaining time every 30 seconds to correct local drift

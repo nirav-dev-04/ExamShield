@@ -1,19 +1,57 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-primary: #fafaf9;
-  --bg-secondary: #f5f5f4;
-  --fg-primary: #1c1917;
-  --fg-secondary: #57534e;
-  --accent-primary: #0f766e;
-  --accent-hover: #115e59;
-  --accent-light: #f0fdfa;
-  --border-subtle: #e7e5e4;
-  --state-warning: #c2410c;
-  --state-danger: #be123c;
+  /* Core Colors */
+  --bg-primary: #F7F8FA;
+  --bg-secondary: #FFFFFF; /* Surface / Card */
+  --fg-primary: #0F1B2E;
+  --fg-secondary: #5B6472;
+  --border-subtle: #E2E5EA;
+  --state-danger: #D64545;
+  --state-success: #1E9E6B;
+  --state-warning: #E8A33D;
+  
+  /* Role Accent Tokens */
+  --student-primary: #4A5FF7;
+  --student-hover: #3B4CD1;
+  --student-tint: #EEF0FF;
+
+  --proctor-primary: #E8A33D;
+  --proctor-hover: #C6862A;
+  --proctor-tint: #FBF2E2;
+
+  --admin-primary: #6C4FD6;
+  --admin-hover: #5A3FB8;
+  --admin-tint: #F1EDFB;
+  
+  --bg-hover: #F0F2F6;
+
+  /* Default Accents */
+  --accent-primary: var(--student-primary);
+  --accent-hover: var(--student-hover);
+  --accent-light: var(--student-tint);
   
   --font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Panel scopes mapping defaults to role accents */
+.panel-student {
+  --accent-primary: var(--student-primary);
+  --accent-hover: var(--student-hover);
+  --accent-light: var(--student-tint);
+}
+
+.panel-proctor {
+  --accent-primary: var(--proctor-primary);
+  --accent-hover: var(--proctor-hover);
+  --accent-light: var(--proctor-tint);
+}
+
+.panel-admin {
+  --accent-primary: var(--admin-primary);
+  --accent-hover: var(--admin-hover);
+  --accent-light: var(--admin-tint);
 }
 
 * {
@@ -51,9 +89,25 @@ button {
 
 /* Premium Layout Elements (Flat, No card blocks) */
 .layout-container {
-  max-width: 1200px;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
   padding: 2rem;
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.layout-container::-webkit-scrollbar {
+  display: none;  /* Safari and Chrome */
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;  /* Safari and Chrome */
 }
 
 .flat-header {
@@ -61,8 +115,10 @@ button {
   padding-bottom: 1.5rem;
   margin-bottom: 2rem;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 100%;
 }
 
 .flat-title {
@@ -94,7 +150,7 @@ button {
 }
 
 .flat-row:hover {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-hover);
   padding-left: 1rem;
   padding-right: 1rem;
 }
@@ -224,4 +280,10 @@ button {
 @keyframes slideIn {
   from { transform: translateY(1rem); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); opacity: 0.5; }
+  50% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.5; }
 }

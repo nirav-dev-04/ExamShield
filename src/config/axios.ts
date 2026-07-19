@@ -15,12 +15,65 @@ liveClient.interceptors.request.use((config) => {
   return config;
 });
 
+let isRefreshing = false;
+let failedQueue: any[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
 liveClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      // Standard unauthorized catcher placeholder
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+      const url = originalRequest.url || "";
+      if (!url.includes("/auth/me") && !url.includes("/auth/login") && !url.includes("/auth/refresh") && !url.includes("/auth/register")) {
+        if (isRefreshing) {
+          return new Promise(function(resolve, reject) {
+            failedQueue.push({ resolve, reject });
+          }).then(() => {
+            return liveClient(originalRequest);
+          }).catch(err => {
+            return Promise.reject(err);
+          });
+        }
+
+        originalRequest._retry = true;
+        isRefreshing = true;
+
+        try {
+          await liveClient.post("/auth/refresh");
+          isRefreshing = false;
+          processQueue(null);
+          return liveClient(originalRequest);
+        } catch (refreshError) {
+          isRefreshing = false;
+          processQueue(refreshError);
+          if (window.location.pathname !== "/") {
+            window.location.href = "/";
+          }
+          return Promise.reject(refreshError);
+        }
+      }
     }
+
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      const url = originalRequest?.url || "";
+      if (!url.includes("/auth/me") && !url.includes("/auth/login") && !url.includes("/auth/refresh")) {
+        if (window.location.pathname !== "/") {
+          window.location.href = "/";
+        }
+      }
+    }
+
     return Promise.reject(error);
   }
 );

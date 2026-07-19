@@ -201,6 +201,27 @@ export const mockApiClient = {
   async post<T>(url: string, body?: any, config?: any): Promise<{ data: T; status: number }> {
     await delay();
 
+    // POST /api/auth/reset-password
+    if (url === "/auth/reset-password") {
+      const users = mockDb.getUsers();
+      const user = users.find((u) => u.email === body.email);
+      if (!user) {
+        throw makeErrorResponse("No account registered with this email address.", 400);
+      }
+      if (user.role === "STUDENT") {
+        if (!body.enrollmentNo || body.enrollmentNo.trim().toLowerCase() !== user.enrollmentNo?.trim().toLowerCase()) {
+          throw makeErrorResponse("Enrollment number does not match our records.", 400);
+        }
+      } else {
+        if (!body.staffVerificationCode || (body.staffVerificationCode !== "ldrp" && body.staffVerificationCode !== "12345")) {
+          throw makeErrorResponse("Invalid staff security override PIN.", 400);
+        }
+      }
+      user.passwordHash = body.newPassword;
+      mockDb.saveUsers(users);
+      return { data: { message: "Password reset successfully." } as unknown as T, status: 200 };
+    }
+
     // 1. POST /api/auth/register
     if (url === "/auth/register") {
       const users = mockDb.getUsers();
