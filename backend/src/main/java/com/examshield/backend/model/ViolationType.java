@@ -1,0 +1,18 @@
+package com.examshield.backend.model;
+
+public enum ViolationType {
+    TAB_SWITCH,
+    WINDOW_BLUR,
+    COPY,
+    PASTE,
+    RIGHT_CLICK,
+    SCREEN_SHARE_STOP,
+    VM_DETECTION,
+    DEVTOOLS_OPEN,
+    MULTI_MONITOR,
+    KEYBOARD_SHORTCUT,
+    WEBCAM_DISCONNECT,
+    MOBILE_PHONE_DETECTED,
+    SCREENSHOT_ATTEMPT,
+    SCREEN_RECORDING_ATTEMPT
+}

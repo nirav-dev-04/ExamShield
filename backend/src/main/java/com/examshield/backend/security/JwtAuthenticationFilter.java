@@ -1,0 +1,56 @@
+package com.examshield.backend.security;
+
+import com.examshield.backend.model.User;
+import com.examshield.backend.repository.UserRepository;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+import org.springframework.web.filter.OncePerRequestFilter;
+import java.io.IOException;
+import java.util.Collections;
+
+@Component
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    @Autowired
+    private JwtTokenProvider tokenProvider;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+        try {
+            String jwt = tokenProvider.getJwtFromCookie(request);
+
+            if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
+                String username = tokenProvider.getUsernameFromJwt(jwt);
+                String role = tokenProvider.getRoleFromJwt(jwt);
+
+                User user = userRepository.findByEmail(username).orElse(null);
+                if (user != null && user.getIsActive()) {
+                    SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role);
+                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                            user, null, Collections.singletonList(authority));
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
+            }
+        } catch (Exception ex) {
+            // Log security failure
+            logger.error("Could not set user authentication in security context", ex);
+        }
+
+        filterChain.doFilter(request, response);
+    }
+}
